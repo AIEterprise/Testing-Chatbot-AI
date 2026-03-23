@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parvassive AI | Commander v1</title>
+    <style>
+        :root { --neon: #00ffcc; --bg: #0d1117; --card: #161b22; }
+        body { background: var(--bg); color: white; font-family: 'Inter', sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Progress Overlay */
+        #loader { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .bar-container { width: 80%; height: 10px; background: #333; border-radius: 5px; margin-top: 15px; overflow: hidden; }
+        #bar-fill { height: 100%; width: 0%; background: var(--neon); transition: width 0.3s; box-shadow: 0 0 10px var(--neon); }
+
+        /* Chat UI */
+        header { padding: 15px; background: var(--card); border-bottom: 2px solid var(--neon); text-align: center; font-weight: bold; letter-spacing: 2px; }
+        #chat-log { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+        .msg { padding: 10px 15px; border-radius: 12px; max-width: 80%; font-size: 15px; line-height: 1.5; }
+        .user { align-self: flex-end; background: var(--neon); color: #000; border-bottom-right-radius: 2px; }
+        .ai { align-self: flex-start; background: #21262d; border-bottom-left-radius: 2px; border: 1px solid #30363d; }
+        
+        /* Input Area */
+        .input-box { padding: 15px; background: var(--card); display: flex; gap: 10px; }
+        input { flex: 1; background: #000; border: 1px solid #30363d; color: white; padding: 12px; border-radius: 8px; outline: none; }
+        button { background: var(--neon); color: black; border: none; padding: 0 20px; border-radius: 8px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="loader">
+        <h2 style="color: var(--neon);">BOOTING COMMANDER...</h2>
+        <p id="status-text">Checking GPU cache...</p>
+        <div class="bar-container"><div id="bar-fill"></div></div>
+        <p style="font-size: 12px; margin-top: 10px; color: #888;">(First time download: ~300MB. Jio/5G recommended!)</p>
+    </div>
+
+    <header>PARVASSIVE COMMANDER</header>
+    <div id="chat-log"></div>
+    <div class="input-box">
+        <input type="text" id="user-in" placeholder="Ask anything...">
+        <button onclick="send()">SEND</button>
+    </div>
+
+    <script type="module">
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+        const modelId = "Qwen2.5-0.5B-Instruct-q4f32_1-MLC"; // The "High Compatibility" version;
+        let engine;
+
+        // UI Links
+        const log = document.getElementById("chat-log");
+        const bar = document.getElementById("bar-fill");
+        const status = document.getElementById("status-text");
+
+        // 1. MEMORY SYSTEM: Load old chats from LocalStorage
+        let history = JSON.parse(localStorage.getItem("parvassive_memory")) || [];
+
+        async function init() {
+            try {
+                // Show old history on load
+                history.forEach(m => addBubble(m.role === "user" ? "user" : "ai", m.content));
+
+                engine = await webllm.CreateMLCEngine(modelId, {
+                    initProgressCallback: (p) => {
+                        const pct = Math.round(p.progress * 100);
+                        bar.style.width = pct + "%";
+                        status.innerText = p.text;
+                    }
+                });
+                document.getElementById("loader").style.display = "none";
+            } catch (e) {
+                status.innerText = "Fatal Error: " + e.message;
+            }
+        }
+
+        window.send = async () => {
+            const input = document.getElementById("user-in");
+            const text = input.value.trim();
+            if (!text) return;
+
+            addBubble("user", text);
+            input.value = "";
+
+            const aiBubble = addBubble("ai", "...");
+            
+            // SYSTEM PROMPT (The "Soul" of the AI)
+            const systemPrompt = "You are the AI Commander for Parvassive Playz. Be high-energy, helpful, and use gaming slang. Focus on Mobile Legends and channel growth.";
+            
+            const fullHistory = [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: text }];
+            
+            const reply = await engine.chat.completions.create({ messages: fullHistory });
+            const aiText = reply.choices[0].message.content;
+
+            aiBubble.innerText = aiText;
+
+            // Update Memory
+            history.push({ role: "user", content: text }, { role: "assistant", content: aiText });
+            if (history.length > 10) history = history.slice(-10); // Keep only last 10 messages to save RAM
+            localStorage.setItem("parvassive_memory", JSON.stringify(history));
+
+            log.scrollTop = log.scrollHeight;
+        };
+
+        function addBubble(type, text) {
+            const div = document.createElement("div");
+            div.className = `msg ${type}`;
+            div.innerText = text;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+            return div;
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
